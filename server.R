@@ -15,8 +15,8 @@ shinyServer(function(input, output) {
   
   # Frustration model data for plots
   model_data <- reactive({df<- data.frame(level=fl, 
-                                          suff_occur = (100 - pct_occurence()) * dnorm((fl-sufferer_mean_frust())/sd_frust),
-                                          non_suff_occ = pct_occurence() * dnorm((fl-non_sufferer_mean_frust())/sd_frust)
+                                          suff_occur = pct_occurence() * dnorm((fl-sufferer_mean_frust())/sd_frust),
+                                          non_suff_occ = (100 - pct_occurence()) * dnorm((fl-non_sufferer_mean_frust())/sd_frust)
                                          )
                           melt(df, c("level"),  variable.name=c("SubPopulation"), value.name=c("Occurence"))
   })
