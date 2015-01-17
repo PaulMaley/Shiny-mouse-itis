@@ -56,15 +56,72 @@ shinyServer(function(input, output) {
     df$TestResult <- sapply(df$Afflicted, function(x) { ifelse(x,
                                             sample(c("Positive","Negative"), 1, prob=c(P_TP(), 1-P_TP())),
                                             sample(c("Positive","Negative"), 1, prob=c(P_FP(), 1-P_FP())))})
-    # print(df)
     df
   })
 
   # Render the data frame in a table 
-  output$samples <- renderTable({ sample_data() })
+  output$samples <- renderTable({ sample_data()[1:3,] })
 
   # Display the sample data graphically
   output$samples_graphic <- renderPlot({
     ggplot(sample_data()) + geom_point(aes(x=FrustrationLevel, y=Afflicted, color=TestResult))
+  })
+  
+  # Apply some machine learning
+  # Simple logistic regression on the level of frustration
+  logistic_regression_1 <- reactive({
+    model <- glm( Afflicted ~ FrustrationLevel, family=binomial(logit), data=sample_data())
+    model
+  })
+  
+  output$logistic_regression_1 <- renderPrint({ logistic_regression_1() })
+  output$logistic_regression_1_plot <- renderPlot({
+    predictions_df <- data.frame(FrustrationLevel=fl)
+    predictions_df$Prob <- predict(logistic_regression_1(), data.frame(FrustrationLevel=fl),type="response")
+    ggplot(sample_data()) + geom_point(aes(x=FrustrationLevel, y=ifelse(Afflicted,1,0), color=Afflicted),size=5) + 
+                            geom_line(data=predictions_df, aes(x=FrustrationLevel, y=Prob),size=1.5) +
+                            labs(x="Frustration level", y="Probability of afflication")
+  })
+
+  
+  # Add test result to regression model 
+  logistic_regression_2 <- reactive({
+    model <- glm( Afflicted ~ FrustrationLevel + TestResult, family=binomial(logit), data=sample_data())
+    model
+  })
+  
+  expanded_data <- reactive({
+    data <- sample_data()
+    data[["ProbAffliction"]] <- predict(logistic_regression_2(), data, type="response")
+    data[["Diagnosis"]] <- ifelse(data[["ProbAffliction"]] > input$threshold,"Afflicted","Healthy")
+    data
+  })
+  
+  output$logistic_regression_2 <- renderPrint({ logistic_regression_2() })
+  output$logistic_regression_2_plot <- renderPlot({
+    #data <- sample_data()
+    #data[["ProbAffliction"]] <- predict(logistic_regression_2(), data, type="response")
+    #data[["Diagnosis"]] <- ifelse(data[["ProbAffliction"]] > input$threshold,"Afflicted","Healthy")
+    #print(data)
+    ggplot(expanded_data()) + geom_point(aes(x=FrustrationLevel, y=TestResult, shape=Afflicted, 
+                                  color=Diagnosis), size=5, alpha=0.4) + 
+        scale_shape_manual(values=c(1,4)) + scale_colour_manual(values=c("red", "black")) + 
+        labs(x="Frustration level", y="Test result") 
+  })
+  
+  output$confusion_matrix <- renderTable({
+    data <- expanded_data()
+    x <- table(ifelse(data$Afflicted,"Afflicted","Healthy"), data$Diagnosis)
+    n <- sum(x)
+    A <- (x[1,1] + x[2,2]) / n
+    P <- x[1,1] / colSums(x)[1]
+    R <- x[1,1] / rowSums(x)[1]
+    data.frame(Statistic=c("Accuracy", "Precision", "Recall"), Value=c(A,P,R))
+  })
+  
+  output$client_diagnosis <- renderText({
+    client_data <- data.frame(FrustrationLevel=input$client_frustration_level, TestResult=input$client_test_result)
+    probability <- predict(logistic_regression_2(), newdata=client_data, type="response")
+    ifelse(probability > input$threshold, "Afflicted", "Healthy")
   })
 })
