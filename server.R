@@ -4,7 +4,7 @@ library(reshape2)
 
 fl <- seq(0,100)    # frustration levels
 sd_frust <- 10.0   # std deviation of frustration (equal for both populations)
-
+red_black_scale <- c("red", "black")
 
 shinyServer(function(input, output) {
   
@@ -14,16 +14,22 @@ shinyServer(function(input, output) {
   pct_occurence <- reactive({input$pct_occurence})
   
   # Frustration model data for plots
-  model_data <- reactive({df<- data.frame(level=fl, 
-                                          suff_occur = pct_occurence() * dnorm((fl-sufferer_mean_frust())/sd_frust),
-                                          non_suff_occ = (100 - pct_occurence()) * dnorm((fl-non_sufferer_mean_frust())/sd_frust)
+  model_data <- reactive({
+    df<- data.frame(level=fl, 
+                    suffurers = pct_occurence() * 
+                                 dnorm((fl-sufferer_mean_frust())/sd_frust),
+                    non_suffurers = (100 - pct_occurence()) * 
+                                   dnorm((fl-non_sufferer_mean_frust())/sd_frust)
                                          )
-                          melt(df, c("level"),  variable.name=c("SubPopulation"), value.name=c("Occurence"))
+    melt(df, c("level"),  variable.name=c("SubPopulation"), value.name=c("Occurence"))
   })
   
   output$frustration <- renderPlot({
-    ggplot(model_data()) + geom_area(aes(x=level, y=Occurence, group=SubPopulation, fill=SubPopulation), alpha=0.5) +
-                           xlab("Frustration level")
+    ggplot(model_data()) + geom_area(aes(x=level, y=Occurence, group=SubPopulation, 
+                                         fill=SubPopulation), alpha=0.5) +
+                           xlab("Frustration level") + 
+                           theme(legend.position="bottom") + 
+                           scale_fill_manual(values=red_black_scale)
   })
 
   # Generate data sample
@@ -37,8 +43,9 @@ shinyServer(function(input, output) {
     # cat("Generate: ", n, "\n", sep="")
     
     # Random vector of Afflicted/Not afflicted
+    p <- isolate(pct_occurence()/100.)
     df = data.frame(Afflicted=sample(c(TRUE,FALSE), n, replace=TRUE, 
-                                     prob=c(isolate(pct_occurence()/100.), 1 - isolate(pct_occurence()/100.) ))
+                                     prob=c(p, 1 - p))
                     )
     
     # Get means for afflicted and unaflicted people
@@ -53,9 +60,14 @@ shinyServer(function(input, output) {
     P_FP <- isolate(reactive({input$test_false_positive/100.}))
   
     # Determine random test result also dependent of affliction status
-    df$TestResult <- sapply(df$Afflicted, function(x) { ifelse(x,
-                                            sample(c("Positive","Negative"), 1, prob=c(P_TP(), 1-P_TP())),
-                                            sample(c("Positive","Negative"), 1, prob=c(P_FP(), 1-P_FP())))})
+    df$TestResult <- sapply(df$Afflicted, 
+                            function(x) { 
+                              ifelse(x,
+                                     sample(c("Positive","Negative"), 1, 
+                                            prob=c(P_TP(), 1-P_TP())),
+                                     sample(c("Positive","Negative"), 1, 
+                                            prob=c(P_FP(), 1-P_FP())))
+                            })
     df
   })
 
@@ -64,7 +76,10 @@ shinyServer(function(input, output) {
 
   # Display the sample data graphically
   output$samples_graphic <- renderPlot({
-    ggplot(sample_data()) + geom_point(aes(x=FrustrationLevel, y=Afflicted, color=TestResult))
+    ggplot(sample_data()) + geom_point(aes(x=FrustrationLevel, y=Afflicted, 
+                                           color=TestResult), size=5, alpha=0.5) + 
+                            theme(legend.position="bottom") + 
+                            scale_color_manual(values=red_black_scale)
   })
   
   # Apply some machine learning
@@ -77,35 +92,43 @@ shinyServer(function(input, output) {
   output$logistic_regression_1 <- renderPrint({ logistic_regression_1() })
   output$logistic_regression_1_plot <- renderPlot({
     predictions_df <- data.frame(FrustrationLevel=fl)
-    predictions_df$Prob <- predict(logistic_regression_1(), data.frame(FrustrationLevel=fl),type="response")
-    ggplot(sample_data()) + geom_point(aes(x=FrustrationLevel, y=ifelse(Afflicted,1,0), color=Afflicted),size=5) + 
-                            geom_line(data=predictions_df, aes(x=FrustrationLevel, y=Prob),size=1.5) +
+    predictions_df$Prob <- predict(logistic_regression_1(), 
+                                   data.frame(FrustrationLevel=fl),type="response")
+
+    ggplot(sample_data()) + geom_point(aes(x=FrustrationLevel, 
+                                           y=ifelse(Afflicted,1,0), 
+                                           color=Afflicted),size=5, alpha=0.5) + 
+                            geom_line(data=predictions_df, 
+                                      aes(x=FrustrationLevel, y=Prob),size=1.5) +
+                            theme(legend.position="bottom") + 
+                            scale_color_manual(values=red_black_scale) + 
                             labs(x="Frustration level", y="Probability of afflication")
   })
 
   
   # Add test result to regression model 
   logistic_regression_2 <- reactive({
-    model <- glm( Afflicted ~ FrustrationLevel + TestResult, family=binomial(logit), data=sample_data())
+    model <- glm( Afflicted ~ FrustrationLevel + TestResult, family=binomial(logit), 
+                  data=sample_data())
     model
   })
   
   expanded_data <- reactive({
     data <- sample_data()
     data[["ProbAffliction"]] <- predict(logistic_regression_2(), data, type="response")
-    data[["Diagnosis"]] <- ifelse(data[["ProbAffliction"]] > input$threshold,"Afflicted","Healthy")
+    data[["Diagnosis"]] <- ifelse(data[["ProbAffliction"]] > 
+                                    input$threshold,"Afflicted","Healthy")
     data
   })
   
   output$logistic_regression_2 <- renderPrint({ logistic_regression_2() })
   output$logistic_regression_2_plot <- renderPlot({
-    #data <- sample_data()
-    #data[["ProbAffliction"]] <- predict(logistic_regression_2(), data, type="response")
-    #data[["Diagnosis"]] <- ifelse(data[["ProbAffliction"]] > input$threshold,"Afflicted","Healthy")
-    #print(data)
-    ggplot(expanded_data()) + geom_point(aes(x=FrustrationLevel, y=TestResult, shape=Afflicted, 
-                                  color=Diagnosis), size=5, alpha=0.4) + 
-        scale_shape_manual(values=c(1,4)) + scale_colour_manual(values=c("red", "black")) + 
+    ggplot(expanded_data()) + geom_point(aes(x=FrustrationLevel, y=TestResult, 
+                                             shape=Afflicted, color=Diagnosis), 
+                                         size=5, alpha=0.4) + 
+        scale_shape_manual(values=c(1,4)) + 
+        theme(legend.position="bottom") + 
+        scale_color_manual(values=red_black_scale) + 
         labs(x="Frustration level", y="Test result") 
   })
   
@@ -120,8 +143,10 @@ shinyServer(function(input, output) {
   })
   
   output$client_diagnosis <- renderText({
-    client_data <- data.frame(FrustrationLevel=input$client_frustration_level, TestResult=input$client_test_result)
-    probability <- predict(logistic_regression_2(), newdata=client_data, type="response")
+    client_data <- data.frame(FrustrationLevel=input$client_frustration_level, 
+                              TestResult=input$client_test_result)
+    probability <- predict(logistic_regression_2(), 
+                           newdata=client_data, type="response")
     ifelse(probability > input$threshold, "Afflicted", "Healthy")
   })
 })
