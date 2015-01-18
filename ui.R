@@ -4,7 +4,8 @@ library(shiny)
 shinyUI(fluidPage(
   
   # Application title
-  titlePanel("Mouse-itis predictor: An exercise in Shiny"),
+  fluidRow(column(width=10, offset=1, 
+                  h1("Mouse-itis predictor"))),
   
 #  fluidRow(column(width=10, offset=1, )),
   
