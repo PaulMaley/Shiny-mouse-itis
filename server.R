@@ -102,7 +102,7 @@ shinyServer(function(input, output) {
                                       aes(x=FrustrationLevel, y=Prob),size=1.5) +
                             theme(legend.position="bottom") + 
                             scale_color_manual(values=red_black_scale) + 
-                            labs(x="Frustration level", y="Probability of afflication")
+                            labs(x="Frustration level", y="Probability of affliction")
   })
 
   

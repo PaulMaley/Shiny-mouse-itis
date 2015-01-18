@@ -37,7 +37,7 @@ shinyUI(fluidPage(
                   min=30, max=50, value=35),
       br(),
       sliderInput("sufferer_mean_frust",
-                  label="Mean frustration of non-sufferer",
+                  label="Mean frustration of sufferer",
                   min=50, max=70, value=65),
       br()
     ),
